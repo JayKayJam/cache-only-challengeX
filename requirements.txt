@@ -1,1 +1,3 @@
+# This doesn't include CUDA requirements, manually install at https://pytorch.org
 rfdetr[train]
+opencv-python

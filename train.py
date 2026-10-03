@@ -5,7 +5,6 @@ model = RFDETRSmall()
 
 
 def main():
-    print("Beginning training...")
     model.train(
         dataset_dir=".",
         epochs=10,
