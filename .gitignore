@@ -219,3 +219,6 @@ __marimo__/
 
 # Stuff i don't feel like categorizing
 runs/
+*.flv
+*.stderr.log
+*.stdout.log
