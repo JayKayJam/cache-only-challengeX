@@ -26,7 +26,11 @@ class RTMP2SocketController(SimpleRTMPController):
         session.state = RemoteProcessFLVWriter()
         logger.debug(f"output to {prefix}.flv")
         await session.state.initialize(
-            command=f"ffmpeg -y -i pipe:0 -c:v copy -c:a copy -f flv {prefix}.flv",
+            command=(
+                f'ffmpeg -y -i pipe:0 '
+                f'-c:v copy -c:a copy -f flv "{prefix}.flv" '
+                f'-c:v copy -an -f mpegts "udp://127.0.0.1:5000?pkt_size=1316"'
+            ),
             stdout_log=f"{prefix}.stdout.log",
             stderr_log=f"{prefix}.stderr.log",
         )

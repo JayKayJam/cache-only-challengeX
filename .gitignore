@@ -220,5 +220,6 @@ __marimo__/
 # Stuff i don't feel like categorizing
 runs/
 *.flv
+*.flv-c
 *.stderr.log
 *.stdout.log
