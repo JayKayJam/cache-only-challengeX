@@ -223,3 +223,7 @@ runs/
 *.flv-c
 *.stderr.log
 *.stdout.log
+detections/
+test/
+train/
+valid/

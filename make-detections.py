@@ -6,9 +6,18 @@ import os
 import supervision as sv
 import cv2
 from rfdetr import RFDETRSmall
+import json
+from datetime import datetime
+import base64
 
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "fflags;nobuffer|flags;low_delay"
 model = RFDETRSmall(pretrain_weights="runs/drone_v1/checkpoint_best_total.pth")
+
+DETECTION_THRESHOLD = 0.3       # Confidence of detection required for the detection to be displayed
+FRAMES_TO_SAVE = 30             # Number of simultaneous detection frames until image is saved
+DETECTION_LENIENCY = 10         # Number of frames a detection can drop before resetting detection count
+SAVE_DELAY = 60                 # Number of frames with no detection before another image can save
+DETECTION_DIR = "detections"    # Directory name for detections to be saved to
 
 box_annotator = sv.BoxAnnotator(
     thickness=3
@@ -61,7 +70,7 @@ def capture_video():
 
 
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)  # convert to RGB format
-        detections = model.predict(frame_rgb, threshold=0.3)
+        detections = model.predict(frame_rgb, threshold=DETECTION_THRESHOLD)
 
         labels = [
             f"{model.class_names[class_id]} {confidence:.2%}"
@@ -83,6 +92,10 @@ def capture_video():
 def capture_live():
     reader = FrameReader("udp://127.0.0.1:5000?fifo_size=5000000&overrun_nonfatal=1")
     last_frame_id = 0
+    filenum = 1
+    detect_streak = 0
+    miss_streak = 0
+    detection_saved = False
 
     cv2.namedWindow("RF-DETR Video", cv2.WINDOW_NORMAL) # initialize window
     cv2.resizeWindow("RF-DETR Video", 512, 512)         # resize window
@@ -98,7 +111,8 @@ def capture_live():
             last_frame_id = reader.frame_id
             frame_bgr = reader.frame.copy()
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)  # convert to RGB format
-            detections = model.predict(frame_rgb, threshold=0.3)
+            detections = model.predict(frame_rgb, threshold=DETECTION_THRESHOLD)
+            detections = detections[detections.class_id < len(model.class_names)]   # remove objects that aren't real detections
 
             labels = [
                         f"{model.class_names[class_id]} {confidence:.2%}"
@@ -108,14 +122,62 @@ def capture_live():
             annotated_frame = box_annotator.annotate(frame_bgr, detections)
             annotated_frame = label_annotator.annotate(annotated_frame, detections, labels)
 
+            if len(detections) > 0:
+                detect_streak += 1
+                miss_streak = 0
+
+            if detect_streak >= FRAMES_TO_SAVE and detection_saved == False:
+                event = save_detection(annotated_frame, detections, filenum)
+                print(f"Saved {event['image_file']} with confidence {event['max_confidence']}")
+                filenum += 1
+                detection_saved = True
+
+            elif miss_streak > SAVE_DELAY:
+                detection_saved = False
+
+            else:
+                miss_streak += 1
+                if (miss_streak % 5 == 0):
+                    print(f"Miss streak: {miss_streak}")
+                if miss_streak > DETECTION_LENIENCY:
+                    detect_streak = 0
+
             cv2.imshow("RF-DETR Video", annotated_frame)        # display window
 
+    # Might want to clear out detections directory here during actual implementation
     reader.stop()
     cv2.destroyAllWindows()
 
+
+def save_detection(annotated_frame, detections, file_number):
+    os.makedirs(DETECTION_DIR, exist_ok=True)
+    filenum = file_number
+
+    while os.path.exists(f"{DETECTION_DIR}/detection_{filenum}.jpg"):
+        filenum += 1
+
+    cv2.imwrite(f"{DETECTION_DIR}/detection_{filenum}.jpg", annotated_frame)
+    success, encoded_image = cv2.imencode('.jpg', annotated_frame)
+
+    if not success:
+        print(f"Failed to encode image: {DETECTION_DIR}/detection_{filenum}.jpg")
+
+    event = {
+        "id": filenum,
+        "time": datetime.now().isoformat(),
+        "classes": sorted({model.class_names[c] for c in detections.class_id}),
+        "max_confidence": round(float(detections.confidence.max()), 3),
+        "num_detections": len(detections),
+        "image_file": f"{DETECTION_DIR}/detection_{filenum}",
+        "image_b64": base64.b64encode(encoded_image.tobytes()).decode("ascii"),
+        "gps": None,   # add later
+    }
+    with open(f"{DETECTION_DIR}/detection_{filenum}.json", "w") as f:
+        json.dump(event, f, indent=4)
+    return event
+
 def main():
-    capture_live()
-    # will add another function later, likely
+    capture_video()
 
 if __name__ == "__main__":
     main()
