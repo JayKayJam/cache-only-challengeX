@@ -18,7 +18,9 @@ FRAMES_TO_SAVE = 30             # Number of simultaneous detection frames until 
 DETECTION_LENIENCY = 10         # Number of frames a detection can drop before resetting detection count
 SAVE_DELAY = 60                 # Number of frames with no detection before another image can save
 DETECTION_DIR = "detections"    # Directory name for detections to be saved to
+TEST_VIDEO = "test_videos/turtle_burrow.mp4"
 
+# Thickness and scale of the detection box and confidence label
 box_annotator = sv.BoxAnnotator(
     thickness=3
 )
@@ -27,7 +29,9 @@ label_annotator = sv.LabelAnnotator(
     text_thickness=3
 )
 
-
+"""
+    Class for detecting each frame in a live video feed
+"""
 class FrameReader:
     def __init__(self, source):
         self.source = source
@@ -52,15 +56,20 @@ class FrameReader:
     def stop(self):
         self.running = False
 
-
+"""
+    Function for displaying detections and confidence of videos saved on the system.
+    Change constant value "TEST_VIDEO" at the top of the file to whichever input file you wish to test.
+    This function does not save output result, it is instead used to test if the vision model is working
+    before putting it to live test.
+"""
 def capture_video():
-    video_source = "test_videos/turtle_burrow.mp4"
+    video_source = TEST_VIDEO
     video_capture = cv2.VideoCapture(video_source)
     if not video_capture.isOpened():
         raise RuntimeError(f"Failed to open video source: {video_source}")
 
     cv2.namedWindow("RF-DETR Video", cv2.WINDOW_NORMAL) # initialize window
-    cv2.resizeWindow("RF-DETR Video", 512, 512)         # resize window
+    cv2.resizeWindow("RF-DETR Video", 1024, 1024)       # resize window
     print("Window opening, press 'q' to exit window")
 
     while True:
@@ -80,7 +89,7 @@ def capture_video():
         annotated_frame = box_annotator.annotate(frame_bgr, detections)
         annotated_frame = label_annotator.annotate(annotated_frame, detections, labels)
 
-        cv2.imshow("RF-DETR Video", annotated_frame)        # display window
+        cv2.imshow("RF-DETR Video", annotated_frame)    # display window
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
@@ -126,15 +135,20 @@ def capture_live():
                 detect_streak += 1
                 miss_streak = 0
 
+            # If an object is detected for enough continuous frames, save the image and proper json data
             if detect_streak >= FRAMES_TO_SAVE and detection_saved == False:
                 event = save_detection(annotated_frame, detections, filenum)
                 print(f"Saved {event['image_file']} with confidence {event['max_confidence']}")
                 filenum += 1
                 detection_saved = True
 
+            # If the live feed hasn't detected an object for a long time, it's assumed that the previous
+            # detection has been passed and new detections are new objects
             elif miss_streak > SAVE_DELAY:
                 detection_saved = False
 
+            # If no object is detected, increment a miss streak and reset the detection streak if said
+            # miss streak is past a certain leniency threshold
             else:
                 miss_streak += 1
                 if (miss_streak % 5 == 0):
@@ -149,6 +163,11 @@ def capture_live():
     cv2.destroyAllWindows()
 
 
+"""
+    Function for saving the image and json data of a recent detection to specified directory. 
+    The directory can be changed by changing the constant value "DETECTION_DIR" at the top
+    of the file.
+"""
 def save_detection(annotated_frame, detections, file_number):
     os.makedirs(DETECTION_DIR, exist_ok=True)
     filenum = file_number
@@ -162,6 +181,7 @@ def save_detection(annotated_frame, detections, file_number):
     if not success:
         print(f"Failed to encode image: {DETECTION_DIR}/detection_{filenum}.jpg")
 
+    # Json data to be saved to the output file
     event = {
         "id": filenum,
         "time": datetime.now().isoformat(),
