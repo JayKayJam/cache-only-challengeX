@@ -1,0 +1,6 @@
+# This doesn't include CUDA requirements, manually install at https://pytorch.org
+rfdetr[train]
+pyrtmp
+opencv-python
+# pytap2            # For GPS testing
+# "meshtastic[cli]" # For GPS testing

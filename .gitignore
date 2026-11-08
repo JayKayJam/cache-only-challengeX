@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Stuff i don't feel like categorizing
+runs/
+*.flv
+*.flv-c
+*.stderr.log
+*.stdout.log
+detections/
+test/
+train/
+valid/
